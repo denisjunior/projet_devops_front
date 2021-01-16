@@ -1,0 +1,83 @@
+workflows:
+  version: 2
+  build-deploy_frontend:
+    jobs:
+      - install-dependencies
+      - build:
+          requires:
+            - install-dependencies
+      - front-deploy:
+          requires:
+            - build
+      - docker-build-and-push
+
+version: 2
+jobs:
+  install-dependencies:
+    docker:
+      - image: circleci/node:dubnium-browsers
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - dependencies-{{ checksum "package.json" }}-{{ .Environment.CACHE_VERSION }}
+            - dependencies-
+      - run: yarn global add node-gyp && yarn install
+      - save_cache:
+          paths:
+            - node_modules
+          key: dependencies-{{ checksum "package.json" }}-{{ .Environment.CACHE_VERSION }}
+
+ build:
+    docker:
+      - image: circleci/node:dubnium-browsers
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - dependencies-{{ checksum "package.json" }}-{{ .Environment.CACHE_VERSION }}
+            - dependencies-
+      - run: yarn build
+      - run:
+          name: Copy deployment artifacts to workspace
+          command: |
+            cp dist/ /tmp/dist -r
+      - store_artifacts:
+          path: /tmp/dist
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - dist
+
+front-deploy:
+    docker:
+      - image: circleci/node:dubnium-browsers
+    working_directory: ~/dist
+    steps:
+      - attach_workspace:
+          at: /tmp
+      - run:
+          name: Deploy app
+          command: |
+            npx netlify-cli deploy --site $NETLIFY_SITE_ID --auth $NETLIFY_ACCESS_TOKEN --dir /tmp/dist --prod
+
+ docker-build-and-push:
+    docker:
+      - image: docker:17.05.0-ce-git
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build application Docker image
+          command: |
+            docker build --cache-from=app -t app .
+      - deploy:
+          name: Publish application to docker hub
+          command: |
+            docker login -e $DOCKER_HUB_EMAIL -u $DOCKER_HUB_USER_ID -p $DOCKER_HUB_PWD
+            docker tag app $DOCKER_HUB_USER_ID/tp_final_devops_frontend:$CIRCLE_BUILD_NUM
+            docker tag app $DOCKER_HUB_USER_ID/tp_final_devops_frontend:latest
+            docker push $DOCKER_HUB_USER_ID/tp_final_devops_frontend:$CIRCLE_BUILD_NUM
+            docker push $DOCKER_HUB_USER_ID/tp_final_devops_frontend:latest
