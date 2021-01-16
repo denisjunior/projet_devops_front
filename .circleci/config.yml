@@ -51,7 +51,7 @@ jobs:
           paths:
             - dist
 
-front-deploy:
+  front-deploy:
     docker:
       - image: circleci/node:dubnium-browsers
     working_directory: ~/dist
@@ -63,7 +63,7 @@ front-deploy:
           command: |
             npx netlify-cli deploy --site $NETLIFY_SITE_ID --auth $NETLIFY_ACCESS_TOKEN --dir /tmp/dist --prod
 
-docker-build-and-push:
+  docker-build-and-push:
     docker:
       - image: docker:17.05.0-ce-git
     steps:
